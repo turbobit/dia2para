@@ -2,6 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const isNumber = require('is-number');
 const CronJob = require('cron').CronJob;
+
 var express = require('express');
 var app = express();
 app.use(express.json());
@@ -73,9 +74,9 @@ app.post('/getAll', async function (req, res) {
                     name like ? 
                 )
             `);
-            sql_value.push( "%"+where+"%");
-            sql_value.push( "%"+where+"%");
-            sql_value.push( "%"+where+"%");
+            sql_value.push("%" + where + "%");
+            sql_value.push("%" + where + "%");
+            sql_value.push("%" + where + "%");
         }
         //console.log(sql_value);
         sql_value.push(skip);
@@ -89,6 +90,14 @@ app.post('/getAll', async function (req, res) {
         const [docs, fields] = await conn.execute(sql, sql_value);
         //console.log(docs);
         //console.log(docs.length);
+
+        //제목과 내용 이름에서 하이라이트 기능을 키자, 검색어가 무조건 있다 고기만 자르자
+
+        if (false) {
+            for (let doc of docs) {
+
+            }
+        }
         if (docs !== null) {
             ret = {
                 recordsTotal: totalCnt,

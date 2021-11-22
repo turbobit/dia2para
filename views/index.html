@@ -25,12 +25,9 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm"><button class="col-sm bt-search-clear">비우기</button></div>
-            <div class="col-sm"><button class="col-sm bt-search-normal">삽니다</button></div>
-            <div class="col-sm"><button class="col-sm bt-search-night">팝니다</button></div>
-            <div class="col-sm"><button class="col-sm bt-search-hell">나눔</button></div>
-            <div class="col-sm">조건은 Or 적용</div>
             <div class="col-sm"><button class="col-sm bt-search-start">갱신</button></div>
             <div class="col-sm"><button class="col-sm bt-search-stop">정지</button></div>
+            <div class="col-sm"><span id="info_status"></span></div>
         </div>
         <div class="row">
             <div class="col-sm"><input style="width:100%" type="text" id="mySearchText" placeholder="Search..."></div>
@@ -87,31 +84,90 @@
                     {
                         "data": "title",
                         "render": function (data, type, row, meta) {
+                            let mySearchTexts = $('#mySearchText').val();
+                            if (mySearchTexts.length > 0 && data !== null) {
+                                mySearchTexts = mySearchTexts.trim();
+                                const wheres = mySearchTexts.split(" ");
+                                let poscount = 0; //발견된수가 0이면 그냥 원래 본문
+                                for (let where of wheres) {
+                                    //한단어 마다
+                                    data = highlightWords(data, where);
+                                }
+                            }
                             return `<a href="${row.href}" target="_blank">${data}</a>`;
                         }
                     },
-                    { "data": "content" },
+                    {
+                        "data": "content",
+                        "render": function (data, type, row, meta) {
+                            let str = ''; //출력할 str
+                            let mySearchTexts = $('#mySearchText').val();
+                            if (mySearchTexts.length > 0 && data !== null) {
+                                data = data.replace(/<\/?[^>]+>/gi, '');
+                                mySearchTexts = mySearchTexts.trim();
+                                const wheres = mySearchTexts.split(" ");
+                                let poscount = 0; //발견된수가 0이면 그냥 원래 본문
+                                for (let where of wheres) {
+                                    //한단어 마다
+                                    data = highlightWords(data, where);
+                                    let pos = 0;
+                                    let curlength = 45;
+                                    while (true) {
+                                        let foundPos = data.indexOf(where, pos);
+                                        if (foundPos == -1) break;
+
+                                        //문자열 발견시 전후 20자를 str에 포함
+                                        if (foundPos < curlength) {
+                                            //0자리부터 20자
+                                            str += data.substr(0, curlength * 2);
+                                        } else {
+                                            //-10자리부터 20자
+                                            str += data.substr(foundPos - curlength, curlength + where.length + 20);
+                                        }
+                                        pos = foundPos + 1;
+                                        poscount++;
+                                    }
+
+                                }
+                                if (!poscount) {
+                                    return data;
+
+                                } else {
+                                    return str;
+
+                                }
+
+                            } else {
+                                return data;
+                            }
+
+                        }
+                    },
                     {
                         "data": "name",
                         "render": function (data, type, row, meta) {
                             return '<span class="row_names" onclick="checkNameButton($(this).text())">' + data + '</span>';
-                            //console.log(data);
-                            //moment(row.updatedDate).format('DD/MM/YYYY hh:mm:ss');
-                            return moment(data).fromNow();
-                            //return type === 'display' && data.length > 40 ?
-                            //   '<span title="' + data + '">' + data.substr(0, 38) + '...</span>' :
-                            //    data;
                         }
                     },
                 ],
             "dom": '<"top"i>rt<"bottom"><"clear">'
 
         });
+
+        $("#mySearchText").keyup(function (e) {
+            if (e.keyCode == 13) {
+                $("#info_status").text('검색시작: ' + $('#mySearchText').val());
+                table.search($('#mySearchText').val()).draw();
+            }
+        });
+
         $('#mySearchButton').on('keyup click', function () {
+            $("#info_status").text('검색시작: ' + $('#mySearchText').val());
             table.search($('#mySearchText').val()).draw();
         });
 
         $(".bt-search-clear").click(function () {
+            $("#info_status").text('전체목록 표시중');
             $('#mySearchText').val('');
             table.search('').draw();
         });
@@ -121,6 +177,7 @@
             new_search_values.push('삽');
             new_search_values.push('ㅅㅅ');
             check_new_search_values(new_search_values, prev_search_value);
+            $("#info_status").text('검색시작: ' + $('#mySearchText').val());
         });
         $(".bt-search-night").click(function () {
             prev_search_value = $('#mySearchText').val()
@@ -128,12 +185,14 @@
             new_search_values.push('팔');
             new_search_values.push('ㅍ');
             check_new_search_values(new_search_values, prev_search_value);
+            $("#info_status").text('검색시작: ' + $('#mySearchText').val());
         });
         $(".bt-search-hell").click(function () {
             prev_search_value = $('#mySearchText').val()
             let new_search_values = [];
             new_search_values.push('나눔');
             check_new_search_values(new_search_values, prev_search_value);
+            $("#info_status").text('검색시작: ' + $('#mySearchText').val());
         });
     });
     var inter = setInterval(function () {
@@ -141,12 +200,14 @@
     }, 1500);
 
     $(".bt-search-start").click(function () {
+        $("#info_status").text('자동갱신: 시작됨');
         clearInterval(inter);
         inter = setInterval(function () {
             table.ajax.reload(null, false); // user paging is not reset on reload
         }, 1500);
     });
     $(".bt-search-stop").click(function () {
+        $("#info_status").text('자동갱신: 중단됨');
         clearInterval(inter);
     });
 
@@ -177,6 +238,15 @@
         let new_search_values = [];
         new_search_values.push(o.trim());
         check_new_search_values(new_search_values, prev_search_value);
+    }
+    function highlightWords(line, word, htmltag) {
+        var tag = htmltag || ["<big><font color='red'>", "</font></big>"];
+        var regex = new RegExp('(' + preg_quote(word) + ')', 'gi');
+        return line.replace(regex, tag[0] + "$1" + tag[1]);
+    }
+
+    function preg_quote(str) {
+        return (str + '').replace(/([\\\.\+\*\?\[\^\]\$\(\)\{\}\=\!\<\>\|\:])/g, "\\$1");
     }
 </script>
 
