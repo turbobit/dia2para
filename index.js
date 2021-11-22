@@ -12,6 +12,7 @@ require('dotenv').config();
 
 // configs 변수
 const configs = {
+    EXPRESS_PORT: process.env.EXPRESS_PORT || '3000',
     DB_HOST: process.env.DB_HOST || 'localhost',
     DB_PORT: process.env.DB_PORT || 3306,
     DB_USER: process.env.DB_USER || 'root',
@@ -128,7 +129,7 @@ app.post('/getAll', async function (req, res) {
     }
 
 });
-app.listen(3000, () => {
+app.listen(configs.EXPRESS_PORT, () => {
     console.log('Server is up and running');
 });
 
