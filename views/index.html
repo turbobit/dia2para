@@ -1,0 +1,183 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css"
+        href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.2/css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.3/css/dataTables.bootstrap4.min.css">
+    <script type="text/javascript" language="javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <script type="text/javascript" language="javascript"
+        src="https://cdn.datatables.net/1.11.3/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" language="javascript"
+        src="https://cdn.datatables.net/1.11.3/js/dataTables.bootstrap4.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment-with-locales.min.js"
+        integrity="sha512-LGXaggshOkD/at6PFNcp2V2unf9LzFq6LE+sChH7ceMTDP0g2kn6Vxwgg7wkPP7AAtX+lmPqPdxB47A0Nz0cMQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        body {
+            padding-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm"><button class="col-sm bt-search-clear">비우기</button></div>
+            <div class="col-sm"><button class="col-sm bt-search-normal">삽니다</button></div>
+            <div class="col-sm"><button class="col-sm bt-search-night">팝니다</button></div>
+            <div class="col-sm"><button class="col-sm bt-search-hell">나눔</button></div>
+            <div class="col-sm">조건은 Or 적용</div>
+            <div class="col-sm"><button class="col-sm bt-search-start">갱신</button></div>
+            <div class="col-sm"><button class="col-sm bt-search-stop">정지</button></div>
+        </div>
+        <div class="row">
+            <div class="col-sm"><input style="width:100%" type="text" id="mySearchText" placeholder="Search..."></div>
+            <div class="col-sm"><button style="width:50%" id="mySearchButton">Search</button></div>
+        </div>
+    </div>
+    <div class="container-fluid">
+        <table id="ListsAll" class="display table table-bordered">
+            <thead>
+                <tr>
+                    <th>num</th>
+                    <th>date</th>
+                    <th width="40%">title</th>
+                    <th width="40%">content</th>
+                    <th>name</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</body>
+<script>
+    var table, prev_search_value;
+    $.fn.dataTable.ext.errMode = 'none';
+    moment.locale('ko');
+    $(document).ready(function () {
+        table = $('#ListsAll').DataTable({
+            "paging": true,
+            "pageLength": 50,
+            "bLengthChange": false,
+            //"processing": true,
+            "serverSide": true,
+            //"searching": true,
+            "ajax": {
+                "data": "json",
+                "type": "POST",
+                "url": "/getAll"
+            },
+            //"order": [[1, "desc"]],
+            "columns":
+                [
+                    { "data": "num" },
+                    {
+                        "data": "date",
+                        "render": function (data, type, row, meta) {
+                            //console.log(data);
+                            //moment(row.updatedDate).format('DD/MM/YYYY hh:mm:ss');
+                            return moment(data).fromNow();
+                            //return type === 'display' && data.length > 40 ?
+                            //   '<span title="' + data + '">' + data.substr(0, 38) + '...</span>' :
+                            //    data;
+                        }
+                    },
+                    {
+                        "data": "title",
+                        "render": function (data, type, row, meta) {
+                            return `<a href="${row.href}" target="_blank">${data}</a>`;
+                        }
+                    },
+                    { "data": "content" },
+                    {
+                        "data": "name",
+                        "render": function (data, type, row, meta) {
+                            return '<span class="row_names" onclick="checkNameButton($(this).text())">' + data + '</span>';
+                            //console.log(data);
+                            //moment(row.updatedDate).format('DD/MM/YYYY hh:mm:ss');
+                            return moment(data).fromNow();
+                            //return type === 'display' && data.length > 40 ?
+                            //   '<span title="' + data + '">' + data.substr(0, 38) + '...</span>' :
+                            //    data;
+                        }
+                    },
+                ],
+            "dom": '<"top"i>rt<"bottom"><"clear">'
+
+        });
+        $('#mySearchButton').on('keyup click', function () {
+            table.search($('#mySearchText').val()).draw();
+        });
+
+        $(".bt-search-clear").click(function () {
+            $('#mySearchText').val('');
+            table.search('').draw();
+        });
+        $(".bt-search-normal").click(function () {
+            prev_search_value = $('#mySearchText').val()
+            let new_search_values = [];
+            new_search_values.push('삽');
+            new_search_values.push('ㅅㅅ');
+            check_new_search_values(new_search_values, prev_search_value);
+        });
+        $(".bt-search-night").click(function () {
+            prev_search_value = $('#mySearchText').val()
+            let new_search_values = [];
+            new_search_values.push('팔');
+            new_search_values.push('ㅍ');
+            check_new_search_values(new_search_values, prev_search_value);
+        });
+        $(".bt-search-hell").click(function () {
+            prev_search_value = $('#mySearchText').val()
+            let new_search_values = [];
+            new_search_values.push('나눔');
+            check_new_search_values(new_search_values, prev_search_value);
+        });
+    });
+    var inter = setInterval(function () {
+        table.ajax.reload(null, false); // user paging is not reset on reload
+    }, 1500);
+
+    $(".bt-search-start").click(function () {
+        clearInterval(inter);
+        inter = setInterval(function () {
+            table.ajax.reload(null, false); // user paging is not reset on reload
+        }, 1500);
+    });
+    $(".bt-search-stop").click(function () {
+        clearInterval(inter);
+    });
+
+    function check_new_search_values(new_search_values, prev_search_value) {
+        const wheres = prev_search_value.trim().split(" ");
+        for (let where of wheres) {
+            //기존거에 있으면 패스
+            let isThere = false;
+            for (let value of new_search_values) {
+                if (value === where) {
+                    isThere = true;
+                }
+            }
+            //루프상 없으면 추가
+            if (!isThere) {
+                new_search_values.push(where);
+            }
+        }
+        new_search_value = new_search_values.join(" ").trim();
+
+        $('#mySearchText').val(new_search_value);
+        table.search(new_search_value).draw();
+        //table.search(new_search_value).draw();
+        //$("input[type='search']").val(new_search_value);
+    }
+    function checkNameButton(o) {
+        prev_search_value = '';//$('#mySearchText').val()
+        let new_search_values = [];
+        new_search_values.push(o.trim());
+        check_new_search_values(new_search_values, prev_search_value);
+    }
+</script>
+
+</html>
