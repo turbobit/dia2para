@@ -61,12 +61,18 @@ app.post('/getAll', async function (req, res) {
     let skip = page * rows_per_page; // == 10 for the first page, 10 for the second ...
 
     totalCnt = await collection_list.find().count();
-    console.log("전체 저장된 갯수", totalCnt);
 
     let lastone = await collection_list.find({ touched: true }).sort({ _id: -1 }).limit(1).toArray();
     /**
      * 문자열 조건 검색은 개선이 필요함 
      * 데이터가 쌓이면 or 조건은 매우 느려짐
+     * 
+     * text search uses simple tokenization with no list of stop words and no stemming.
+     * collection_list.createIndex( { title: "text", content: "text", content: "name" } )
+     * collection_list.find({ $text: { $search: search_value, $language: "none" } })
+     * 
+     * db.stores.find( { $text: { $search: "java shop -coffee" } } )
+     * db.stores.find({ $text: { $search: "java coffee shop" } },{ score: { $meta: "textScore" } }).sort( { score: { $meta: "textScore" } } )
      */
     if (search_value !== null) {
         let sql_where = {};
@@ -77,16 +83,17 @@ app.post('/getAll', async function (req, res) {
             sql_where = Object.assign(sql_where, {
                 $or: [
                     { title: { $regex: where } },
-                    { content: { $regex: where } }
+                    { content: { $regex: where } },
+                    { name: { $regex: where } }
                 ]
             }
             );
         }
 
-        //500개 전까지꺼만 검색
+        //1000개 전까지꺼만 검색
         const wher = {
             $and: [
-                { _id: { $gt: (lastone[0]._id - 500) } },
+                { _id: { $gt: (lastone[0]._id - 1000) } },
                 { touched: true },
                 sql_where
             ]
