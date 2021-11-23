@@ -75,7 +75,7 @@
                         "render": function (data, type, row, meta) {
                             //console.log(data);
                             //moment(row.updatedDate).format('DD/MM/YYYY hh:mm:ss');
-                            return moment(data).fromNow();
+                            return (moment(data).fromNow() == 'Invalid date') ? data : moment(data).fromNow();
                             //return type === 'display' && data.length > 40 ?
                             //   '<span title="' + data + '">' + data.substr(0, 38) + '...</span>' :
                             //    data;
@@ -103,13 +103,14 @@
                             let str = ''; //출력할 str
                             let mySearchTexts = $('#mySearchText').val();
                             if (mySearchTexts.length > 0 && data !== null) {
-                                data = data.replace(/<\/?[^>]+>/gi, '');
+                                data = data.replace(/&nbsp;/gi, ' ');
+                                data = data.replace(/[<][^>]*[>]/gi, '');
                                 mySearchTexts = mySearchTexts.trim();
                                 const wheres = mySearchTexts.split(" ");
                                 let poscount = 0; //발견된수가 0이면 그냥 원래 본문
                                 for (let where of wheres) {
                                     //한단어 마다
-                                    data = highlightWords(data, where);
+                                    
                                     let pos = 0;
                                     let curlength = 45;
                                     while (true) {
@@ -118,11 +119,11 @@
 
                                         //문자열 발견시 전후 20자를 str에 포함
                                         if (foundPos < curlength) {
-                                            //0자리부터 20자
-                                            str += data.substr(0, curlength * 2);
+                                            //0자리부터 10자
+                                            str += highlightWords(data.substr(0, 10 + curlength) + '</br>',where);
                                         } else {
-                                            //-10자리부터 20자
-                                            str += data.substr(foundPos - curlength, curlength + where.length + 20);
+                                            //-10자리부터 10자
+                                            str += highlightWords(data.substr(foundPos - curlength - 5, 10 + curlength) + '</br>',where);
                                         }
                                         pos = foundPos + 1;
                                         poscount++;
