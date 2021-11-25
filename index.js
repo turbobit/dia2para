@@ -12,7 +12,9 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.static(__dirname + '/views'));
 var striptags = require('striptags');
 require('dotenv').config();
-const { MongoClient } = require('mongodb');
+
+var ForerunnerDB = require("forerunnerdb");
+var fdb = new ForerunnerDB();
 
 // configs 변수
 const configs = {
@@ -23,7 +25,7 @@ const configs = {
     DB_PASS: process.env.DB_PASS || 'admin',
     connectTimeout: Number(process.env.CONNECT_TIMEOUT || 1000)
 }
-const client = new MongoClient(configs.DB_HOST);
+var client;
 var conn, db, collection_list, totalCnt;
 
 app.use(function (req, res, next) {
@@ -60,15 +62,23 @@ app.post('/getAll', async function (req, res) {
     let page = (offset / rows_per_page);// + 1; // == 1
     let skip = page * rows_per_page; // == 10 for the first page, 10 for the second ...
 
-    totalCnt = await collection_list.find().count();
+    totalCnt = await collection_list.count();
 
-    let lastone = await collection_list.find({ touched: true }).sort({ _id: -1 }).limit(1).toArray();
+    let lastone = await collection_list.find({
+        touched: 1
+    }, {
+        $orderBy: {
+            _id: -1 // Sort ascending or -1 for descending
+        },
+        $page: 0,
+        $limit: 1
+    });
     /**
      * 문자열 조건 검색은 개선이 필요함 
      * 데이터가 쌓이면 or 조건은 매우 느려짐
      * 
      * text search uses simple tokenization with no list of stop words and no stemming.
-     * collection_list.createIndex( { title: "text", content: "text", content: "name" } )
+     * collection_list.ensureIndex( { title: "text", content: "text", content: "name" } )
      * collection_list.find({ $text: { $search: search_value, $language: "none" } })
      * 
      * db.stores.find( { $text: { $search: "java shop -coffee" } } )
@@ -80,11 +90,12 @@ app.post('/getAll', async function (req, res) {
 
         //두단어 이상 지원을 하기위해 조건은 or
         for (let where of wheres) {
+            let where_RegExp = new RegExp(where);
             sql_where = Object.assign(sql_where, {
                 $or: [
-                    { title: { $regex: where } },
-                    { content: { $regex: where } },
-                    { name: { $regex: where } }
+                    { title: where_RegExp },
+                    { content: where_RegExp },
+                    { name: where_RegExp }
                 ]
             }
             );
@@ -94,12 +105,18 @@ app.post('/getAll', async function (req, res) {
         const wher = {
             $and: [
                 { _id: { $gt: (lastone[0]._id - 1000) } },
-                { touched: true },
+                //{ touched: 1 },
                 sql_where
             ]
         }
 
-        const docs = await collection_list.find(wher).sort({ "_id": -1 }).limit(rows_per_page).toArray();
+        //const docs = await collection_list.find(wher).sort({ "_id": -1 }).limit(rows_per_page).toArray();
+        const docs = await collection_list.find(wher, {
+            $orderBy: {
+                _id: -1 // Sort ascending or -1 for descending
+            },
+            $limit: rows_per_page
+        });
 
         if (docs !== null) {
             ret = {
@@ -125,10 +142,15 @@ app.post('/getAll', async function (req, res) {
         const docs = await collection_list.find({
             $and: [
                 { _id: { $gt: lastone[0]._id - 1000 } },
-                { touched: true }
+                //{ touched: 1 }
             ]
-        }).sort({ "_id": -1 }).limit(rows_per_page).toArray();
-
+        }, {
+            $orderBy: {
+                _id: -1 // Sort ascending or -1 for descending
+            },
+            $limit: rows_per_page
+        });
+        //console.log(docs);
         if (docs !== null) {
             ret = {
                 recordsTotal: totalCnt,
@@ -175,7 +197,7 @@ async function updateList(url) {
             title: title,
             name: username,
             href: href,
-            touched: false
+            touched: Number(0)
         }
 
         if (num !== '공지') {
@@ -184,23 +206,51 @@ async function updateList(url) {
     });
 
     //ordered:fasle 옵션으로 중복 된건 저장 안하게 
-    collection_list.insertMany(datas, { ordered: false })
-        //.then(console.log)
-        .catch(function (error) {
-            console.log(`Error worth logging: ${error}`); //E11000 duplicate key error collection 중복은 무시가능
-        });
+    collection_list.upsert(datas);
 }
 
-async function updateContent(url) {
-    let docs = await collection_list.find().sort({ "_id": -1 }).limit(60).toArray();
+async function updateContent() {
+    let lastone
+    try {
+        lastone = await collection_list.find({
+            touched: 0
+        }, {
+            $orderBy: {
+                _id: -1 // Sort ascending or -1 for descending
+            },
+            $limit: 1
+        });
+    } catch (e) {
+        console.log(e);
+        return;
+    }
+    let docs;
 
-    //console.log(docs);
+    try {
+        docs = await collection_list.find({
+            $and: [
+                { _id: { $gt: lastone[0]._id - 50 } },
+                { touched: 0 }
+            ]
+        }, {
+            $orderBy: {
+                _id: -1 // Sort ascending or -1 for descending
+            },
+            $page: 0,
+            $limit: 30
+        });//.limit(60).toArray();
+    } catch (e) {
+        console.log(e);
+        return;
+    }
+
+    console.log("업데이트 데이터 대상 : ", docs.length, ", 최근거번호:", lastone[0]._id);
     //for await (let doc of docs) {
     for (let doc of docs) {
         //console.log(doc._id);
         //가장 최근거부터 세부 게시물정보가 있는지 확인하고 업데이트하자
         if (!doc.touched) {
-            console.log('[update]', doc.href);
+            //console.log('[update]', doc.href);
             try {
                 axios.get(encodeURI(doc.href)).then(function (response) {
                     const $ = cheerio.load(response.data);
@@ -216,18 +266,13 @@ async function updateContent(url) {
                     const options = { upsert: true };
                     //const options = {};
                     const updateDoc = {
-                        $set: {
-                            touched: true,
-                            content: content,
-                            date: articleDate
-                        },
+                        touched: Number(1),
+                        content: content,
+                        date: articleDate
                     };
                     //const result = await collection_list.updateOne(filter, updateDoc, options);
-                    collection_list.updateOne(filter, updateDoc, options)
-                        //.then(console.log)
-                        .catch(function (error) {
-                            console.log(`Error worth logging: ${error}`);
-                        });
+                    //collection_list.update(filter, updateDoc)
+                    collection_list.updateById(doc._id, updateDoc);
                 }).catch(error => {
                     console.error(error);
                 })
@@ -238,16 +283,10 @@ async function updateContent(url) {
                 const options = { upsert: true };
                 //const options = {};
                 const updateDoc = {
-                    $set: {
-                        touched: true,
-                    },
+                    touched: 1,
                 };
                 //const result = await collection_list.updateOne(filter, updateDoc, options);
-                collection_list.updateOne(filter, updateDoc, options)
-                    //.then(console.log)
-                    .catch(function (error) {
-                        console.log(`Error worth logging: ${error}`);
-                    });
+                collection_list.updateById(doc._id, updateDoc);
             }
         }
     }
@@ -255,7 +294,7 @@ async function updateContent(url) {
 function cl(index, object) {
     console.log(index, typeof object, isNumber(object), object)
 }
-var cjob_updateContent = new CronJob('*/5 * * * * *', updateAll, null, false, 'Asia/Seoul'); //1분마다 0 * * * * *
+var cjob_updateContent = new CronJob('*/4 * * * * *', updateAll, null, false, 'Asia/Seoul'); //1분마다 0 * * * * *
 
 async function updateAll() {
     console.log('[updateContent][start]', Date.now());
@@ -263,10 +302,14 @@ async function updateAll() {
     //https://www.closetoya.com/1.html
     //https://www.inven.co.kr/board/diablo2/5739?category=%EC%8A%A4%ED%83%A0&p=1
     //await updateList("https://www.closetoya.com/1.html");
-    await updateList("https://www.inven.co.kr/board/diablo2/5737?p=1");
+    updateList("https://www.inven.co.kr/board/diablo2/5737?p=1");
+    updateContent();
+    collection_list.save();
+    
+    //console.log('[updateContent][end]', Date.now());
+    //totalCnt = await collection_list.count()
+    //console.log("전체 저장된 갯수", totalCnt);
 
-    await updateContent();
-    console.log('[updateContent][end]', Date.now());
 }
 function shouldCompress(req, res) {
     if (req.headers['x-no-compression']) {
@@ -275,23 +318,42 @@ function shouldCompress(req, res) {
     }
 
     // fallback to standard filter function
-    return compression.filter(req, res)
+    return compression.filter(req, res);//
 }
 (async () => {//
     console.log(configs);
-    await client.connect();
-    console.log('Connected successfully to server');
-    db = client.db('dia2para');
-    collection_list = db.collection('list');
-
-    totalCnt = await collection_list.find().count()
+    db = fdb.db("dia2para");
+    db.persist.dataDir("./db");
+    collection_list = await db.collection('list');
+    //collection_list = db.collection('list',{primaryKey: "num"});
+    await collection_list.load();
+    totalCnt = await collection_list.count()
     console.log("전체 저장된 갯수", totalCnt);
 
-    await collection_list.createIndex({ num: -1 });
-    await collection_list.createIndex({ touched: 1 });
+    await collection_list.ensureIndex({ _id: -1 });
+    await collection_list.ensureIndex({ num: -1 });
+    await collection_list.ensureIndex({ touched: 1 });
 
     //게시물 안에 들어가서 내용 추출
     await updateAll();
     cjob_updateContent.start();
 
 })();
+
+process.on('SIGINT', exited);
+process.on('SIGTERM', exited);
+
+function exited() {
+    console.log("'Exit the program....");
+    setTimeout(() => {
+        collection_list.save(function (err) {
+            if (!err) {
+                // Save was successful
+                console.log('datable saved.');
+            }
+            console.log('Program exited.')
+            process.exit();
+        });
+
+    }, 3000);
+}
